@@ -10,11 +10,11 @@ This document details the usage of AI assistants during the development of Relay
 
 ## Key Prompts That Shaped the Design
 1. *"Can you list the roles designed and their authorization level in the application?"* - Sparked the full RBAC matrix definition before writing any code.
-2. *"Go ahead and implement Authorization with the authorization levels that you mentioned here"* - Resulted in the backend-wide enforcement of `ROLE_ADMIN`, `ROLE_REVIEWER`, `ROLE_ENGINEER`, and `ROLE_RELEASE_MANAGER`.
+2. *"Go ahead and implement Authorization with the accurate authorization levels that you mentioned here"* - Resulted in the backend-wide enforcement of `ROLE_ADMIN`, `ROLE_REVIEWER`, `ROLE_ENGINEER`, and `ROLE_RELEASE_MANAGER`.
 3. *"ROLE_REVIEWER should be allowed to create Change Requests, not ROLE_RELEASE_MANAGER"* - Corrected the RBAC mapping in `ChangeRequestService.java`.
-4. *"Let's implement a small new feature and then move on to documentation. Develop an Audit log UI for the admin"* - Initiated the creation of the `AuditController` and the `admin/audit/page.tsx` UI.
+4. *"Let's implement a small new feature: Develop an Audit log UI for the admin"* - Initiated the creation of the `AuditController` and the `admin/audit/page.tsx` UI.
 5. *"Yes, include pagination and advanced filtering in the UI"* - Shifted the audit log implementation from a simple array return to utilizing Spring Data `JpaSpecificationExecutor` and `Pageable`.
-6. *"Is our current workflow of a Change Request this : DRAFT → SUBMITTED → CHANGES_REQUESTED → SUBMITTED → APPROVED → SCHEDULED → SHIPPED ?"* - Verified the actual state machine implementation vs the user's mental model, ensuring terminology mapping was documented.
+6. *"Is our current workflow of a Change Request this : DRAFT → SUBMITTED → CHANGES_REQUESTED → SUBMITTED → APPROVED → SCHEDULED → SHIPPED"* - Verified the actual state machine implementation vs the user's mental model, ensuring terminology mapping was documented.
 
 ## Accepted vs Rewritten Files
 - **Accepted Almost Unchanged:**
