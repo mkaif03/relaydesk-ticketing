@@ -7,7 +7,7 @@
 > - **Changed:** Implemented true Optimistic Locking with custom `409 Conflict` exceptions for concurrent edits.
 > - **Changed:** Added backend pagination, dynamic filtering, and a filter UI to the Change Request dashboard.
 > - **Changed:** Updated the database seed script to provide all 7 user roles and changed the default passwords to `password`.
-> - **Left Out:** We explicitly deleted all AI-generated logs, `CLAUDE.md`, and `AGENTS.md` that were lingering in the previous repository version. We also intentionally skipped implementing File Attachments, Webhooks, SSE, and Rate Limiting to focus entirely on core workflow stability.
+> - **Left Out:** Eplicitly deleted all AI-generated logs, `CLAUDE.md`, and `AGENTS.md` that were lingering in the previous repository version. Also intentionally skipped implementing File Attachments, Webhooks, SSE, and Rate Limiting to focus entirely on core workflow stability.
 
 ## Overview
 
