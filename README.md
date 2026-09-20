@@ -1,5 +1,14 @@
 # RelayDesk - Engineering Change Request & Release Gate Platform
 
+> **Note on Updates:** 
+> This version includes several critical fixes and architectural improvements over the original [relaydesk-ticketing repository](https://github.com/mkaif03/relaydesk-ticketing):
+> - **Changed:** Fully migrated the Next.js frontend to Server Components (RSC) to minimize client-side javascript, handling cookie proxying (`rd_at`) for authentication.
+> - **Changed:** Fixed State Machine vulnerabilities: blocked self-approvals, strictly isolated the `SHIPPED` status to the release service, and enforced RBAC at all transition endpoints.
+> - **Changed:** Implemented true Optimistic Locking with custom `409 Conflict` exceptions for concurrent edits.
+> - **Changed:** Added backend pagination, dynamic filtering, and a filter UI to the Change Request dashboard.
+> - **Changed:** Updated the database seed script to provide all 7 user roles and changed the default passwords to `password`.
+> - **Left Out:** We explicitly deleted all AI-generated logs, `CLAUDE.md`, and `AGENTS.md` that were lingering in the previous repository version. We also intentionally skipped implementing File Attachments, Webhooks, SSE, and Rate Limiting to focus entirely on core workflow stability.
+
 ## Overview
 
 RelayDesk is an Engineering Change Request (CR) and Release Gate Platform designed to track, review, and schedule changes before they hit production. It provides strict Role-Based Access Control (RBAC), auditing, and an approval state machine.
@@ -19,10 +28,14 @@ Once running:
 
 ## Seed Users
 
-A default set of seed users are created on initialization to test different roles:
-- **Admin:** `admin@relaydesk.dev` / `Relay!2026` (Full access, including Audit Logs)
-- **Reviewer:** `reviewer@relaydesk.dev` / `Relay!2026` (Can approve/reject CRs)
-- **Engineer:** `engineer@relaydesk.dev` / `Relay!2026` (Can create and view CRs)
+A default set of seed users are created on initialization to test different roles. The password for all accounts is `password`:
+- **Alice Admin (ROLE_ADMIN):** `admin@relaydesk.dev`
+- **Bob Reviewer (ROLE_REVIEWER):** `reviewer1@relaydesk.dev`
+- **Carol Reviewer (ROLE_REVIEWER):** `reviewer2@relaydesk.dev`
+- **Dave Engineer (ROLE_ENGINEER):** `eng1@relaydesk.dev`
+- **Eve Engineer (ROLE_ENGINEER):** `eng2@relaydesk.dev`
+- **Frank Engineer (ROLE_ENGINEER):** `eng3@relaydesk.dev`
+- **Grace Manager (ROLE_RELEASE_MANAGER):** `manager@relaydesk.dev`
 
 ## Architecture Diagram
 

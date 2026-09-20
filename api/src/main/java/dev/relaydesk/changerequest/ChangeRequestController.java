@@ -24,8 +24,19 @@ public class ChangeRequestController {
     }
 
     @GetMapping
-    public List<ChangeRequestDto> list() {
-        return service.listAll();
+    public dev.relaydesk.common.PageResponseDto<ChangeRequestDto> list(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String riskLevel,
+            @RequestParam(required = false) String environment,
+            @RequestParam(required = false) String authorEmail,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        
+        org.springframework.data.domain.PageRequest pageRequest = org.springframework.data.domain.PageRequest.of(
+                page, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "updatedAt")
+        );
+        return service.listAll(status, riskLevel, environment, authorEmail, q, pageRequest);
     }
 
     @GetMapping("/{id}")

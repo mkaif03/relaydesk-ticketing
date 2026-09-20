@@ -7,6 +7,7 @@ import dev.relaydesk.release.dto.ReleaseRequest;
 import dev.relaydesk.security.CustomUserDetails;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,6 +16,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/releases")
+@PreAuthorize("hasAnyRole('ADMIN', 'RELEASE_MANAGER')")
 public class ReleaseController {
 
     private final ReleaseService releaseService;

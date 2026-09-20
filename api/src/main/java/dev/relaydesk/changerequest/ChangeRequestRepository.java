@@ -1,7 +1,8 @@
 package dev.relaydesk.changerequest;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import java.util.UUID;
 
-public interface ChangeRequestRepository extends JpaRepository<ChangeRequest, UUID> {
+public interface ChangeRequestRepository extends JpaRepository<ChangeRequest, UUID>, JpaSpecificationExecutor<ChangeRequest> {
 }

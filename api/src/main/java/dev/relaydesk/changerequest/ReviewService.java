@@ -43,6 +43,10 @@ public class ReviewService {
         ChangeRequest cr = changeRequestRepository.findById(changeRequestId)
                 .orElseThrow(() -> new NotFoundException("ChangeRequest not found"));
         
+        if (cr.getAuthor().getId().equals(reviewer.getId())) {
+            throw new org.springframework.security.access.AccessDeniedException("You cannot approve or review your own change request");
+        }
+        
         Review review = new Review();
         review.setChangeRequest(cr);
         review.setReviewer(reviewer);

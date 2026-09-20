@@ -1,66 +1,40 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import AuditFilterControls from "@/components/AuditFilterControls";
 
-interface AuditEvent {
-  id: number;
-  actorEmail: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  payload: string;
-  traceId: string;
-  createdAt: string;
-}
+export default async function AuditLogsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | undefined }>;
+}) {
+  const params = await searchParams;
+  const page = params.page || "0";
+  const action = params.action || "";
+  const entityType = params.entityType || "";
 
-interface PageResponse {
-  content: AuditEvent[];
-  totalPages: number;
-  totalElements: number;
-  size: number;
-  number: number;
-}
+  const apiUrl = process.env.API_URL || "http://localhost:8080";
+  const cookieStore = await cookies();
+  const jsessionid = cookieStore.get("rd_at");
+  
+  const headers: Record<string, string> = jsessionid ? { Cookie: `rd_at=${jsessionid.value}` } : {};
 
-export default function AuditLogsPage() {
-  const router = useRouter();
-  const [data, setData] = useState<PageResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(0);
-  const [filterAction, setFilterAction] = useState("");
-  const [filterEntityType, setFilterEntityType] = useState("");
+  const queryParams = new URLSearchParams();
+  queryParams.append("page", page);
+  queryParams.append("size", "20");
+  if (action) queryParams.append("action", action);
+  if (entityType) queryParams.append("entityType", entityType);
 
-  const fetchLogs = () => {
-    setLoading(true);
-    const params = new URLSearchParams({
-      page: page.toString(),
-      size: "20"
-    });
-    if (filterAction) params.append("action", filterAction);
-    if (filterEntityType) params.append("entityType", filterEntityType);
+  const res = await fetch(`${apiUrl}/api/v1/audit?${queryParams.toString()}`, {
+    headers,
+    cache: "no-store",
+  });
 
-    fetch(`/api/v1/audit?${params.toString()}`)
-      .then((res) => {
-        if (res.status === 401 || res.status === 403) {
-          router.push("/");
-          return null;
-        }
-        return res.json();
-      })
-      .then((resData) => {
-        if (resData) setData(resData);
-      })
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    fetchLogs();
-  }, [page, filterAction, filterEntityType]);
-
-  if (!data && loading) {
-    return <div className="min-h-screen flex items-center justify-center text-white">Loading Audit Logs...</div>;
+  if (res.status === 401 || res.status === 403) {
+    redirect("/");
   }
+
+  const data = res.ok ? await res.json() : null;
 
   return (
     <div className="min-h-screen p-8 max-w-7xl mx-auto">
@@ -77,40 +51,7 @@ export default function AuditLogsPage() {
         </Link>
       </header>
 
-      <div className="glass-panel p-6 rounded-2xl mb-8 flex gap-4 items-end">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-400 mb-1">Filter by Action</label>
-          <input
-            type="text"
-            className="w-full bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
-            placeholder="e.g. CR_CREATED"
-            value={filterAction}
-            onChange={(e) => {
-              setFilterAction(e.target.value);
-              setPage(0);
-            }}
-          />
-        </div>
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-400 mb-1">Filter by Entity Type</label>
-          <input
-            type="text"
-            className="w-full bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
-            placeholder="e.g. ChangeRequest"
-            value={filterEntityType}
-            onChange={(e) => {
-              setFilterEntityType(e.target.value);
-              setPage(0);
-            }}
-          />
-        </div>
-        <button 
-          onClick={() => { setFilterAction(""); setFilterEntityType(""); setPage(0); }}
-          className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white bg-gray-800 rounded-lg transition-colors border border-gray-700"
-        >
-          Clear Filters
-        </button>
-      </div>
+      <AuditFilterControls filterAction={action} filterEntityType={entityType} />
 
       <div className="glass-panel rounded-2xl overflow-hidden mb-6">
         <div className="overflow-x-auto">
@@ -125,7 +66,7 @@ export default function AuditLogsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/50">
-              {data?.content.map((log) => (
+              {data?.content?.map((log: any) => (
                 <tr key={log.id} className="hover:bg-white/[0.02] transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                     {new Date(log.createdAt).toLocaleString()}
@@ -149,7 +90,7 @@ export default function AuditLogsPage() {
                   </td>
                 </tr>
               ))}
-              {data?.content.length === 0 && (
+              {(!data?.content || data.content.length === 0) && (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
                     No audit logs found matching the criteria.
@@ -163,24 +104,26 @@ export default function AuditLogsPage() {
 
       {data && data.totalPages > 1 && (
         <div className="flex justify-between items-center glass-panel px-6 py-4 rounded-xl">
-          <button
-            disabled={data.number === 0}
-            onClick={() => setPage(p => Math.max(0, p - 1))}
-            className="px-4 py-2 text-sm font-medium text-white bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors border border-gray-700 hover:bg-gray-700"
+          <Link
+            href={`/admin/audit?${new URLSearchParams({ ...params, page: Math.max(0, parseInt(page, 10) - 1).toString() } as any).toString()}`}
+            className={`px-4 py-2 text-sm font-medium text-white bg-gray-800 rounded-lg transition-colors border border-gray-700 hover:bg-gray-700 ${
+              parseInt(page, 10) === 0 ? "opacity-50 pointer-events-none" : ""
+            }`}
           >
             Previous
-          </button>
+          </Link>
           <span className="text-sm text-gray-400">
-            Page <span className="font-medium text-white">{data.number + 1}</span> of <span className="font-medium text-white">{data.totalPages}</span>
+            Page <span className="font-medium text-white">{parseInt(page, 10) + 1}</span> of <span className="font-medium text-white">{data.totalPages}</span>
             {" "}({data.totalElements} total logs)
           </span>
-          <button
-            disabled={data.number >= data.totalPages - 1}
-            onClick={() => setPage(p => Math.min(data.totalPages - 1, p + 1))}
-            className="px-4 py-2 text-sm font-medium text-white bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors border border-gray-700 hover:bg-gray-700"
+          <Link
+            href={`/admin/audit?${new URLSearchParams({ ...params, page: Math.min(data.totalPages - 1, parseInt(page, 10) + 1).toString() } as any).toString()}`}
+            className={`px-4 py-2 text-sm font-medium text-white bg-gray-800 rounded-lg transition-colors border border-gray-700 hover:bg-gray-700 ${
+              parseInt(page, 10) >= data.totalPages - 1 ? "opacity-50 pointer-events-none" : ""
+            }`}
           >
             Next
-          </button>
+          </Link>
         </div>
       )}
     </div>

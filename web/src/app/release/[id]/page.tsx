@@ -1,47 +1,38 @@
-"use client";
-
-import { useEffect, useState, use } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import ReleaseActionButtons from "@/components/ReleaseActionButtons";
 
-export default function ReleaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const router = useRouter();
-  const { id } = use(params);
-  const [release, setRelease] = useState<any>(null);
-  const [items, setItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+export default async function ReleaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
 
-  const fetchData = async () => {
-    try {
-      const relRes = await fetch(`/api/v1/releases/${id}`);
-      if (relRes.status === 401) return router.push("/login");
-      setRelease(await relRes.json());
+  const apiUrl = process.env.API_URL || "http://localhost:8080";
+  const cookieStore = await cookies();
+  const jsessionid = cookieStore.get("rd_at");
+  
+  const headers: Record<string, string> = jsessionid ? { Cookie: `rd_at=${jsessionid.value}` } : {};
 
-      const itemsRes = await fetch(`/api/v1/releases/${id}/items`);
-      setItems(await itemsRes.json());
-    } finally {
-      setLoading(false);
-    }
-  };
+  const relRes = await fetch(`${apiUrl}/api/v1/releases/${id}`, {
+    headers,
+    cache: "no-store",
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, [id]);
+  if (relRes.status === 401) {
+    redirect("/login");
+  }
 
-  const shipRelease = async () => {
-    const res = await fetch(`/api/v1/releases/${id}/ship?version=${release.version}`, { method: "POST" });
-    if (res.ok) fetchData();
-    else alert("Failed to ship: " + (await res.json()).message);
-  };
+  if (!relRes.ok) {
+    return <div className="min-h-screen flex items-center justify-center text-red-400">Not Found</div>;
+  }
 
-  const rollbackRelease = async () => {
-    const res = await fetch(`/api/v1/releases/${id}/rollback?version=${release.version}`, { method: "POST" });
-    if (res.ok) fetchData();
-    else alert("Failed to rollback: " + (await res.json()).message);
-  };
+  const release = await relRes.json();
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  if (!release) return <div>Not Found</div>;
+  const itemsRes = await fetch(`${apiUrl}/api/v1/releases/${id}/items`, {
+    headers,
+    cache: "no-store",
+  });
+  
+  const items = itemsRes.ok ? await itemsRes.json() : [];
 
   return (
     <div className="min-h-screen p-8 max-w-7xl mx-auto">
@@ -65,23 +56,12 @@ export default function ReleaseDetailPage({ params }: { params: Promise<{ id: st
         
         <p className="text-gray-300 mb-6 relative z-10">{release.notes || "No notes provided."}</p>
         
-        <div className="flex gap-4 relative z-10 pt-4 border-t border-white/10">
-          {release.status === "PLANNED" && (
-            <button onClick={shipRelease} className="px-6 py-2 bg-[var(--color-primary-600)] hover:bg-[var(--color-primary-500)] text-white font-medium rounded-lg transition-colors shadow-[0_0_15px_rgba(79,70,229,0.3)]">
-              Ship Release
-            </button>
-          )}
-          {release.status === "SHIPPED" && (
-            <button onClick={rollbackRelease} className="px-6 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 font-medium border border-red-500/50 rounded-lg transition-colors">
-              Rollback Release
-            </button>
-          )}
-        </div>
+        <ReleaseActionButtons release={release} />
       </div>
 
       <h2 className="text-xl font-semibold text-white mb-4">Included Change Requests</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {items.map(item => (
+        {items.map((item: any) => (
           <Link href={`/cr/${item.changeRequestId}`} key={item.id} className="block group">
             <div className="glass-panel p-4 rounded-xl transition-all duration-300 hover:bg-white/5 border border-white/5 hover:border-white/10">
               <p className="text-sm text-gray-300">Change Request: <span className="font-mono text-xs">{item.changeRequestId}</span></p>

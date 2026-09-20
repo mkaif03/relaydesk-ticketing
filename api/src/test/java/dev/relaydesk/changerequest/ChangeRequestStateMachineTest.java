@@ -45,22 +45,22 @@ class ChangeRequestStateMachineTest {
     }
 
     @Test
-    void testValidTransition_DraftToInReview_AsAuthor() {
+    void testValidTransition_DraftToSubmitted_AsAuthor() {
         ChangeRequest cr = new ChangeRequest();
         cr.setStatus("DRAFT");
         cr.setAuthor(author);
 
-        stateMachine.transition(cr, "IN_REVIEW", author);
-        assertEquals("IN_REVIEW", cr.getStatus());
+        stateMachine.transition(cr, "SUBMITTED", author);
+        assertEquals("SUBMITTED", cr.getStatus());
     }
 
     @Test
-    void testInvalidTransition_DraftToInReview_AsRandomUser() {
+    void testInvalidTransition_DraftToSubmitted_AsRandomUser() {
         ChangeRequest cr = new ChangeRequest();
         cr.setStatus("DRAFT");
         cr.setAuthor(author);
 
-        assertThrows(AccessDeniedException.class, () -> stateMachine.transition(cr, "IN_REVIEW", randomUser));
+        assertThrows(AccessDeniedException.class, () -> stateMachine.transition(cr, "SUBMITTED", randomUser));
     }
 
     @Test
@@ -73,17 +73,17 @@ class ChangeRequestStateMachineTest {
     }
 
     @Test
-    void testGuard_InReviewToApproved_WithoutApproval() {
+    void testGuard_SubmittedToApproved_WithoutApproval() {
         ChangeRequest cr = new ChangeRequest();
-        cr.setStatus("IN_REVIEW");
+        cr.setStatus("SUBMITTED");
 
         assertThrows(IllegalTransitionException.class, () -> stateMachine.transition(cr, "APPROVED", reviewer));
     }
 
     @Test
-    void testGuard_InReviewToApproved_WithApproval_AsReviewer() {
+    void testGuard_SubmittedToApproved_WithApproval_AsReviewer() {
         ChangeRequest cr = new ChangeRequest();
-        cr.setStatus("IN_REVIEW");
+        cr.setStatus("SUBMITTED");
         
         Review review = new Review();
         review.setDecision("APPROVED");
@@ -94,15 +94,24 @@ class ChangeRequestStateMachineTest {
     }
 
     @Test
-    void testGuard_InReviewToApproved_WithApproval_AsAuthor() {
+    void testGuard_SubmittedToApproved_WithApproval_AsAuthor() {
         ChangeRequest cr = new ChangeRequest();
-        cr.setStatus("IN_REVIEW");
+        cr.setStatus("SUBMITTED");
         
         Review review = new Review();
         review.setDecision("APPROVED");
         cr.setReviews(List.of(review));
 
         assertThrows(AccessDeniedException.class, () -> stateMachine.transition(cr, "APPROVED", author));
+    }
+
+    @Test
+    void testTransition_SubmittedToRejected_AsReviewer() {
+        ChangeRequest cr = new ChangeRequest();
+        cr.setStatus("SUBMITTED");
+        
+        stateMachine.transition(cr, "REJECTED", reviewer);
+        assertEquals("REJECTED", cr.getStatus());
     }
 
     @Test
@@ -135,20 +144,43 @@ class ChangeRequestStateMachineTest {
     }
 
     @Test
+    void testTransition_ApprovedToRejected_AsReviewer() {
+        ChangeRequest cr = new ChangeRequest();
+        cr.setStatus("APPROVED");
+
+        stateMachine.transition(cr, "REJECTED", reviewer);
+        assertEquals("REJECTED", cr.getStatus());
+    }
+
+    @Test
+    void testTransition_ApprovedToCancelled_AsAuthor() {
+        ChangeRequest cr = new ChangeRequest();
+        cr.setStatus("APPROVED");
+        cr.setAuthor(author);
+
+        stateMachine.transition(cr, "CANCELLED", author);
+        assertEquals("CANCELLED", cr.getStatus());
+    }
+
+    @Test
     void testTransition_AdminCanDoAnything_ValidFlow() {
         ChangeRequest cr = new ChangeRequest();
         cr.setStatus("DRAFT");
-        cr.setAuthor(author); // Even though admin transitions, author is set
+        cr.setAuthor(author); 
         
-        // Admin transitions DRAFT -> IN_REVIEW (ignoring author rule)
-        stateMachine.transition(cr, "IN_REVIEW", admin);
-        assertEquals("IN_REVIEW", cr.getStatus());
+        // Admin transitions DRAFT -> SUBMITTED 
+        stateMachine.transition(cr, "SUBMITTED", admin);
+        assertEquals("SUBMITTED", cr.getStatus());
         
-        // Admin transitions IN_REVIEW -> APPROVED (ignoring reviewer rule)
+        // Admin transitions SUBMITTED -> APPROVED 
         Review review = new Review();
         review.setDecision("APPROVED");
         cr.setReviews(List.of(review));
         stateMachine.transition(cr, "APPROVED", admin);
         assertEquals("APPROVED", cr.getStatus());
+        
+        // Admin transitions APPROVED -> CANCELLED
+        stateMachine.transition(cr, "CANCELLED", admin);
+        assertEquals("CANCELLED", cr.getStatus());
     }
 }

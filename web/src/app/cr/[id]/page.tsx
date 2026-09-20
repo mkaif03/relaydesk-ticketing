@@ -1,81 +1,44 @@
-"use client";
-
-import { useEffect, useState, use } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import CRActionButtons from "@/components/CRActionButtons";
+import CommentForm from "@/components/CommentForm";
 
-export default function CRDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const router = useRouter();
-  const { id } = use(params);
-  const [cr, setCr] = useState<any>(null);
-  const [reviews, setReviews] = useState<any[]>([]);
-  const [comments, setComments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+export default async function CRDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   
-  const [newComment, setNewComment] = useState("");
-
-  const fetchData = async () => {
-    try {
-      const crRes = await fetch(`/api/v1/change-requests/${id}`);
-      if (crRes.status === 401) return router.push("/login");
-      const crData = await crRes.json();
-      setCr(crData);
-
-      const reviewsRes = await fetch(`/api/v1/change-requests/${id}/reviews`);
-      setReviews(await reviewsRes.json());
-
-      const commentsRes = await fetch(`/api/v1/change-requests/${id}/comments`);
-      setComments(await commentsRes.json());
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, [id]);
-
-  const handleTransition = async (targetStatus: string) => {
-    const res = await fetch(`/api/v1/change-requests/${id}/transition`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: targetStatus, version: cr.version }),
-    });
-    if (res.ok) {
-      fetchData(); // reload
-    } else {
-      const data = await res.json();
-      alert("Failed: " + data.message);
-    }
-  };
-
-  const submitReview = async (status: string) => {
-    const res = await fetch(`/api/v1/change-requests/${id}/reviews`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, notes: "" }),
-    });
-    if (res.ok) fetchData();
-  };
+  const apiUrl = process.env.API_URL || "http://localhost:8080";
+  const cookieStore = await cookies();
+  const jsessionid = cookieStore.get("rd_at");
   
-  const submitComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
-    const res = await fetch(`/api/v1/change-requests/${id}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: newComment }),
-    });
-    if (res.ok) {
-      setNewComment("");
-      fetchData();
-    }
-  };
+  const headers: Record<string, string> = jsessionid ? { Cookie: `rd_at=${jsessionid.value}` } : {};
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  if (!cr) return <div>Not Found</div>;
+  // Fetch CR
+  const crRes = await fetch(`${apiUrl}/api/v1/change-requests/${id}`, { headers, cache: "no-store" });
+  if (crRes.status === 401) {
+    redirect("/login");
+  }
+  if (!crRes.ok) {
+    return <div>Not Found</div>;
+  }
+  const cr = await crRes.json();
+
+  // Fetch Reviews
+  const reviewsRes = await fetch(`${apiUrl}/api/v1/change-requests/${id}/reviews`, { headers, cache: "no-store" });
+  const reviews = reviewsRes.ok ? await reviewsRes.json() : [];
+
+  // Fetch Comments
+  const commentsRes = await fetch(`${apiUrl}/api/v1/change-requests/${id}/comments`, { headers, cache: "no-store" });
+  const comments = commentsRes.ok ? await commentsRes.json() : [];
+
+  // Fetch User
+  const userRes = await fetch(`${apiUrl}/api/v1/auth/me`, { headers, cache: "no-store" });
+  let currentUser = null;
+  if (userRes.ok) {
+    currentUser = await userRes.json();
+  }
 
   return (
     <div className="min-h-screen p-8 max-w-7xl mx-auto">
@@ -96,24 +59,15 @@ export default function CRDetailPage({ params }: { params: Promise<{ id: string 
                 </span>
               </div>
               <div className="flex gap-2">
-                <Link
-                  href={`/cr/${id}/edit`}
-                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded transition-colors"
-                >
-                  Edit
-                </Link>
-                <button
-                  onClick={async () => {
-                    if (confirm("Are you sure you want to delete this Change Request?")) {
-                      const res = await fetch(`/api/v1/change-requests/${id}`, { method: "DELETE" });
-                      if (res.ok) router.push("/");
-                      else alert("Failed to delete CR");
-                    }
-                  }}
-                  className="px-3 py-1.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 text-sm font-medium rounded transition-colors"
-                >
-                  Delete
-                </button>
+                {(currentUser?.role === 'ROLE_ADMIN' || currentUser?.id === cr.authorId) && (
+                  <Link
+                    href={`/cr/${id}/edit`}
+                    className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded transition-colors"
+                  >
+                    Edit
+                  </Link>
+                )}
+                {/* Note: Delete functionality requires a client component if we keep the confirm dialogue. For now we will omit or we can create a DeleteButton component */}
               </div>
             </div>
             
@@ -144,23 +98,7 @@ export default function CRDetailPage({ params }: { params: Promise<{ id: string 
               </div>
             </div>
 
-            <div className="mt-8 pt-6 border-t border-white/10 flex flex-wrap gap-3">
-              {cr.status === "DRAFT" && (
-                <button onClick={() => handleTransition("IN_REVIEW")} className="px-4 py-2 bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 hover:bg-yellow-500/30 rounded-lg transition-colors">
-                  Submit for Review
-                </button>
-              )}
-              {cr.status === "IN_REVIEW" && (
-                <>
-                  <button onClick={() => submitReview("APPROVED")} className="px-4 py-2 bg-green-500/20 text-green-300 border border-green-500/50 hover:bg-green-500/30 rounded-lg transition-colors">
-                    Approve CR
-                  </button>
-                  <button onClick={() => handleTransition("APPROVED")} className="px-4 py-2 bg-blue-500/20 text-blue-300 border border-blue-500/50 hover:bg-blue-500/30 rounded-lg transition-colors ml-auto">
-                    Transition to Approved (Requires Review)
-                  </button>
-                </>
-              )}
-            </div>
+            <CRActionButtons cr={cr} currentUser={currentUser} />
           </div>
         </div>
 
@@ -170,19 +108,19 @@ export default function CRDetailPage({ params }: { params: Promise<{ id: string 
             <h3 className="text-lg font-semibold text-white mb-6">Activity Timeline</h3>
             
             <div className="space-y-4 mb-6">
-              {reviews.map(r => (
+              {reviews.map((r: any) => (
                 <div key={r.id} className="p-3 bg-white/5 rounded-xl border border-white/5 transition-all hover:bg-white/10">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-medium text-gray-200">Review</span>
                     <span className="text-xs text-gray-500">{new Date(r.createdAt).toLocaleString()}</span>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${r.status === 'APPROVED' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${r.status === 'APPROVED' ? 'bg-green-500/20 text-green-400' : 'bg-orange-500/20 text-orange-400'}`}>
                     {r.status}
                   </span>
                 </div>
               ))}
 
-              {comments.map(c => (
+              {comments.map((c: any) => (
                 <div key={c.id} className="p-3 bg-white/5 rounded-xl border border-white/5 transition-all hover:bg-white/10">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-sm font-medium text-[var(--color-primary-100)]">Comment</span>
@@ -193,22 +131,7 @@ export default function CRDetailPage({ params }: { params: Promise<{ id: string 
               ))}
             </div>
 
-            <form onSubmit={submitComment} className="pt-4 border-t border-white/10">
-              <textarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment..."
-                className="w-full bg-black/20 border border-white/10 rounded-lg p-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary-500)] focus:ring-1 focus:ring-[var(--color-primary-500)] resize-none mb-3 transition-all"
-                rows={3}
-              />
-              <button
-                type="submit"
-                disabled={!newComment.trim()}
-                className="w-full py-2 bg-[var(--color-primary-600)] hover:bg-[var(--color-primary-500)] text-white text-sm font-medium rounded-lg transition-colors shadow-[0_0_15px_rgba(79,70,229,0.2)] disabled:opacity-50 disabled:shadow-none"
-              >
-                Post Comment
-              </button>
-            </form>
+            <CommentForm crId={id} />
           </div>
         </div>
         

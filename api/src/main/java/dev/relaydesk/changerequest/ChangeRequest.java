@@ -4,10 +4,12 @@ import dev.relaydesk.common.BaseEntity;
 import dev.relaydesk.user.Team;
 import dev.relaydesk.user.User;
 import jakarta.persistence.*;
+import org.hibernate.annotations.SQLRestriction;
 import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "change_requests")
+@SQLRestriction("deleted_at IS NULL")
 public class ChangeRequest extends BaseEntity {
 
     @Column(nullable = false, unique = true, updatable = false)

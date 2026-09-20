@@ -11,14 +11,11 @@ import java.util.Set;
 public class ChangeRequestStateMachine {
 
     private static final Map<String, Set<String>> VALID_TRANSITIONS = Map.of(
-            "DRAFT", Set.of("IN_REVIEW"),
-            "IN_REVIEW", Set.of("APPROVED", "REJECTED", "DRAFT"),
-            "REJECTED", Set.of("DRAFT"),
-            "APPROVED", Set.of("SCHEDULED", "DRAFT"),
-            "SCHEDULED", Set.of("IN_PROGRESS", "DRAFT"),
-            "IN_PROGRESS", Set.of("COMPLETED", "FAILED"),
-            "COMPLETED", Set.of("FAILED"),
-            "FAILED", Set.of("DRAFT", "IN_PROGRESS")
+            "DRAFT", Set.of("SUBMITTED"),
+            "SUBMITTED", Set.of("APPROVED", "CHANGES_REQUESTED", "REJECTED"),
+            "CHANGES_REQUESTED", Set.of("SUBMITTED"),
+            "APPROVED", Set.of("SCHEDULED", "REJECTED", "CANCELLED"),
+            "SCHEDULED", Set.of("SHIPPED")
     );
 
     public void transition(ChangeRequest cr, String targetStatus, User actor) {
@@ -30,20 +27,32 @@ public class ChangeRequestStateMachine {
 
         boolean isAdmin = "ROLE_ADMIN".equals(actor.getRole());
 
-        if (("IN_REVIEW".equals(targetStatus) || ("DRAFT".equals(targetStatus) && !"DRAFT".equals(currentStatus))) && !isAdmin) {
+        // SUBMITTED logic
+        if ("SUBMITTED".equals(targetStatus) && !isAdmin) {
             if (!cr.getAuthor().getId().equals(actor.getId())) {
                 throw new org.springframework.security.access.AccessDeniedException("Only the author or an admin can transition to " + targetStatus);
             }
         }
 
-        if (("APPROVED".equals(targetStatus) || "REJECTED".equals(targetStatus)) && !isAdmin) {
-            if (!"ROLE_REVIEWER".equals(actor.getRole())) {
-                throw new org.springframework.security.access.AccessDeniedException("Only a Reviewer or Admin can transition to " + targetStatus);
+        // CANCELLED logic
+        if ("CANCELLED".equals(targetStatus) && !isAdmin) {
+            if (!cr.getAuthor().getId().equals(actor.getId()) && !"ROLE_REVIEWER".equals(actor.getRole())) {
+                throw new org.springframework.security.access.AccessDeniedException("Only the author, reviewer, or an admin can transition to CANCELLED");
             }
         }
 
-        if (("SCHEDULED".equals(targetStatus) || "IN_PROGRESS".equals(targetStatus) || 
-             "COMPLETED".equals(targetStatus) || "FAILED".equals(targetStatus)) && !isAdmin) {
+        // APPROVED, CHANGES_REQUESTED, REJECTED logic
+        if (("APPROVED".equals(targetStatus) || "CHANGES_REQUESTED".equals(targetStatus) || "REJECTED".equals(targetStatus))) {
+            if (!isAdmin && !"ROLE_REVIEWER".equals(actor.getRole())) {
+                throw new org.springframework.security.access.AccessDeniedException("Only a Reviewer or Admin can transition to " + targetStatus);
+            }
+            if (cr.getAuthor().getId().equals(actor.getId())) {
+                throw new org.springframework.security.access.AccessDeniedException("You cannot approve, reject, or request changes on your own change request");
+            }
+        }
+
+        // SCHEDULED, SHIPPED logic
+        if (("SCHEDULED".equals(targetStatus) || "SHIPPED".equals(targetStatus)) && !isAdmin) {
             if (!"ROLE_RELEASE_MANAGER".equals(actor.getRole())) {
                 throw new org.springframework.security.access.AccessDeniedException("Only a Release Manager or Admin can transition to " + targetStatus);
             }
@@ -53,8 +62,8 @@ public class ChangeRequestStateMachine {
             if (cr.getReviews() == null || cr.getReviews().stream().noneMatch(r -> "APPROVED".equals(r.getDecision()))) {
                 throw new IllegalTransitionException("Cannot transition to APPROVED without at least one APPROVED review");
             }
-            if (cr.getReviews().stream().anyMatch(r -> "REJECTED".equals(r.getDecision()))) {
-                throw new IllegalTransitionException("Cannot transition to APPROVED while there is a REJECTED review");
+            if (cr.getReviews().stream().anyMatch(r -> "CHANGES_REQUESTED".equals(r.getDecision()) || "REJECTED".equals(r.getDecision()))) {
+                throw new IllegalTransitionException("Cannot transition to APPROVED while there is a CHANGES_REQUESTED or REJECTED review");
             }
         }
         

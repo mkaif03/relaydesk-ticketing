@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.security.access.AccessDeniedException;
+import java.time.OffsetDateTime;
 
 @Service
 public class ChangeRequestService {
@@ -29,8 +30,44 @@ public class ChangeRequestService {
         this.auditService = auditService;
     }
 
-    public List<ChangeRequestDto> listAll() {
-        return repository.findAll().stream().map(this::toDto).collect(Collectors.toList());
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public dev.relaydesk.common.PageResponseDto<ChangeRequestDto> listAll(
+            String status, String riskLevel, String environment, String authorEmail, String q, org.springframework.data.domain.Pageable pageable) {
+
+        org.springframework.data.jpa.domain.Specification<ChangeRequest> spec = (root, query, cb) -> {
+            if (query.getResultType() != Long.class && query.getResultType() != long.class) {
+                root.fetch("author", jakarta.persistence.criteria.JoinType.LEFT);
+                root.fetch("team", jakarta.persistence.criteria.JoinType.LEFT);
+            }
+
+            java.util.List<jakarta.persistence.criteria.Predicate> predicates = new java.util.ArrayList<>();
+            if (status != null && !status.isEmpty()) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (riskLevel != null && !riskLevel.isEmpty()) {
+                predicates.add(cb.equal(root.get("riskLevel"), riskLevel));
+            }
+            if (environment != null && !environment.isEmpty()) {
+                predicates.add(cb.equal(root.get("environment"), environment));
+            }
+            if (authorEmail != null && !authorEmail.isEmpty()) {
+                predicates.add(cb.equal(root.get("author").get("email"), authorEmail));
+            }
+            if (q != null && !q.isEmpty()) {
+                predicates.add(cb.like(cb.lower(root.get("title")), "%" + q.toLowerCase() + "%"));
+            }
+            return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
+
+        org.springframework.data.domain.Page<ChangeRequest> page = repository.findAll(spec, pageable);
+
+        List<ChangeRequestDto> content = page.getContent().stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
+
+        return new dev.relaydesk.common.PageResponseDto<>(
+                content, page.getTotalPages(), page.getTotalElements(), page.getSize(), page.getNumber()
+        );
     }
 
     public ChangeRequestDto get(UUID id) {
@@ -72,7 +109,9 @@ public class ChangeRequestService {
             throw new AccessDeniedException("You do not have permission to update this Change Request");
         }
         
-        cr.setVersion(req.getVersion());
+        if (cr.getVersion() != req.getVersion()) {
+            throw new dev.relaydesk.common.StaleVersionException("Change request was modified by someone else", cr.getVersion());
+        }
 
         if (req.getTitle() != null) cr.setTitle(req.getTitle());
         if (req.getDescription() != null) cr.setDescription(req.getDescription());
@@ -90,8 +129,14 @@ public class ChangeRequestService {
 
     @Transactional
     public ChangeRequestDto transition(UUID id, String targetStatus, long version, User actor, String traceId) {
+        if (!java.util.Set.of("SUBMITTED", "APPROVED", "CHANGES_REQUESTED", "REJECTED", "CANCELLED").contains(targetStatus)) {
+            throw new dev.relaydesk.common.IllegalTransitionException("Invalid target status for public transition API");
+        }
+        
         ChangeRequest cr = findById(id);
-        cr.setVersion(version);
+        if (cr.getVersion() != version) {
+            throw new dev.relaydesk.common.StaleVersionException("Change request was modified by someone else", cr.getVersion());
+        }
 
         String oldStatus = cr.getStatus();
         stateMachine.transition(cr, targetStatus, actor);
@@ -104,11 +149,12 @@ public class ChangeRequestService {
     @Transactional
     public void delete(UUID id, User actor, String traceId) {
         ChangeRequest cr = findById(id);
-        if (!cr.getAuthor().getId().equals(actor.getId()) && !actor.getRole().equals("ROLE_ADMIN")) {
-            throw new AccessDeniedException("You do not have permission to delete this Change Request");
+        if (!actor.getRole().equals("ROLE_ADMIN")) {
+            throw new AccessDeniedException("You do not have permission to delete this Change Request. Only ADMIN can delete.");
         }
-        repository.delete(cr);
-        auditService.logEvent(actor, "CR_DELETED", "ChangeRequest", id, "Deleted CR", traceId);
+        cr.setDeletedAt(OffsetDateTime.now());
+        repository.save(cr);
+        auditService.logEvent(actor, "CR_DELETED", "ChangeRequest", id, "Soft-deleted CR", traceId);
     }
 
     private ChangeRequest findById(UUID id) {

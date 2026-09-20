@@ -3,16 +3,16 @@
 This document outlines key architectural decisions and tradeoffs made during the development of RelayDesk.
 
 ## 1. Authentication Storage: httpOnly Cookies vs localStorage
-- **Decision:** Store JWTs in `httpOnly` cookies.
-- **Tradeoff:** Storing tokens in `httpOnly` cookies mitigates XSS (Cross-Site Scripting) attacks since the token cannot be accessed via JavaScript. However, this introduces complexity when trying to pass the token between the Next.js App Router (Server Components) and the Java API Backend, as we must explicitly forward the cookies. Using `localStorage` would have been easier to manage in client-side code but leaves the tokens vulnerable to XSS.
+- **Decision:** Store JWTs in `httpOnly` cookies named `rd_at` and `rd_rt`.
+- **Tradeoff:** Storing tokens in `httpOnly` cookies mitigates XSS (Cross-Site Scripting) attacks since the token cannot be accessed via JavaScript. When adopting Next.js Server Components, we encountered the challenge of cookie-forwarding: since Server Components run on the Node.js server, they do not automatically forward the client's cookies to the Spring Boot API. We had to explicitly read the `rd_at` cookie from Next.js `cookies()` and manually attach it to outgoing `fetch` requests to authenticate API calls from the Server Components.
 
 ## 2. Locking Mechanism: Optimistic Locking vs Pessimistic Locking
-- **Decision:** Used Optimistic Locking (via JPA `@Version`) for `ChangeRequest` updates.
-- **Tradeoff:** Optimistic locking prevents lost updates when multiple users attempt to edit or review the same CR simultaneously. It requires adding a retry mechanism or displaying a `409 Conflict` error to the user if a concurrent modification occurs. We chose this over pessimistic locking to avoid database-level locking overhead and potential deadlocks, prioritizing read performance and system scalability.
+- **Decision:** Used Optimistic Locking (via JPA `@Version` and a manual `version` field) for `ChangeRequest` and `Release` updates.
+- **Tradeoff:** Optimistic locking prevents lost updates when multiple users attempt to edit or review the same CR simultaneously. Before mutating an entity, the API verifies the client's version against the database version and throws a 409 Conflict (`StaleVersionException`) if there's a mismatch. This avoids database-level locking overhead and deadlocks, prioritizing read performance and system scalability.
 
 ## 3. Frontend Architecture: App Router Data Fetching vs BFF (Backend-for-Frontend)
-- **Decision:** Direct Server Component data fetching to the Spring Boot API instead of building a dedicated BFF (Backend-For-Frontend).
-- **Tradeoff:** Next.js Server Components essentially act as a proxy, fetching data from the Spring Boot API on the server before sending HTML to the client. This avoids the overhead of maintaining a separate GraphQL or Node.js BFF layer, keeping the architecture simpler (React -> Java). The tradeoff is handling API authentication cleanly in RSCs (requiring manual cookie forwarding) and a tight coupling between the frontend and the core API.
+- **Decision:** Direct Server Component data fetching to the Spring Boot API, protected by Next.js Middleware.
+- **Tradeoff:** Next.js Server Components essentially act as a proxy, fetching data from the Spring Boot API on the server before sending HTML to the client. This avoids the overhead of maintaining a separate GraphQL or Node.js BFF layer. We adopted this pattern and pushed interactive pieces (forms, buttons) to client component leaves using the `"use client"` directive. The primary challenge was properly passing the JWT `rd_at` cookie along to the Spring API on each fetch call within the Server Components.
 
 ## 4. Transaction Boundaries: Service-level vs Controller-level `@Transactional`
 - **Decision:** Placed `@Transactional` annotations on the Service layer rather than the Controller layer.

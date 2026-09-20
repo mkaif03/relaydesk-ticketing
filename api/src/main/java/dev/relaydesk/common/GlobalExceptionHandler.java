@@ -23,7 +23,18 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalTransitionException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalTransition(IllegalTransitionException ex, HttpServletRequest req) {
-        return buildResponse("ILLEGAL_TRANSITION", ex.getMessage(), HttpStatus.CONFLICT, req, null);
+        return buildResponse("ILLEGAL_TRANSITION", ex.getMessage(), HttpStatus.BAD_REQUEST, req, null);
+    }
+
+    @ExceptionHandler(StaleVersionException.class)
+    public ResponseEntity<Map<String, Object>> handleStaleVersion(StaleVersionException ex, HttpServletRequest req) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("code", "STALE_VERSION");
+        body.put("message", ex.getMessage());
+        body.put("traceId", req.getAttribute("traceId"));
+        body.put("fieldErrors", new Object[0]);
+        body.put("currentVersion", ex.getCurrentVersion());
+        return new ResponseEntity<>(body, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
